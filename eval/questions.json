@@ -1,0 +1,11 @@
+[
+ {"id":"h1","split":"dev","advisor":"hormozi","query":"How can I make an offer more attractive without just cutting the price?","expected":["hormozi-value"]},
+ {"id":"h2","split":"dev","advisor":"hormozi","query":"What makes a bonus useful for customers?","expected":["hormozi-bonuses"]},
+ {"id":"n1","split":"dev","advisor":"naval","query":"How can software amplify output without hiring more people?","expected":["naval-leverage"]},
+ {"id":"n2","split":"dev","advisor":"naval","query":"Where does distinctive expertise come from?","expected":["naval-knowledge"]},
+ {"id":"k1","split":"dev","advisor":"kallaway","query":"Why use a repeatable process for short video openings?","expected":["kallaway-hooks"]},
+ {"id":"k2","split":"dev","advisor":"kallaway","query":"How does understanding viewer psychology relate to hooks?","expected":["kallaway-psychology"]},
+ {"id":"h3","split":"holdout","advisor":"hormozi","query":"Would reducing the customer's work and wait improve perceived value?","expected":["hormozi-value"]},
+ {"id":"n3","split":"holdout","advisor":"naval","query":"What can I create once and distribute many times without asking investors?","expected":["naval-leverage"]},
+ {"id":"k3","split":"holdout","advisor":"kallaway","query":"What is the argument for systematically designing the start of a video?","expected":["kallaway-hooks"]}
+]

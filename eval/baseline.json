@@ -1,0 +1,63 @@
+{
+  "cases": 9,
+  "recall_at_3": 1.0,
+  "mrr": 0.8888888888888888,
+  "advisor_isolation": true,
+  "details": [
+    {
+      "id": "h1",
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "isolated": true
+    },
+    {
+      "id": "h2",
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "isolated": true
+    },
+    {
+      "id": "n1",
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "isolated": true
+    },
+    {
+      "id": "n2",
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "isolated": true
+    },
+    {
+      "id": "k1",
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 0.5,
+      "isolated": true
+    },
+    {
+      "id": "k2",
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "isolated": true
+    },
+    {
+      "id": "h3",
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "isolated": true
+    },
+    {
+      "id": "n3",
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "isolated": true
+    },
+    {
+      "id": "k3",
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 0.5,
+      "isolated": true
+    }
+  ],
+  "corpus_sha256": "f7291d1897aeed72a9420d530babefba050b9fa6a37e98a6d8f21378f71458f8"
+}
