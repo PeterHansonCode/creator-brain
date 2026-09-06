@@ -56,6 +56,43 @@ def test_api_rejects_invalid_advisor_and_foreign_origin():
     assert client.get('/api/sources',headers={'Origin':'https://example.com'}).status_code==403
 
 
+def test_one_advisor_failure_does_not_discard_the_others_and_is_reported():
+    # README previously claimed test coverage for per-advisor failure
+    # isolation that didn't actually exist. This exercises the real
+    # /api/query endpoint with one advisor's retrieval forced to raise,
+    # confirming the other two still return their real evidence and the
+    # failed one gets an explicit, non-empty error instead of a result
+    # that's silently indistinguishable from "nothing relevant found".
+    from unittest.mock import patch
+    from fastapi.testclient import TestClient
+    import brain.api as api_module
+    from brain.api import app
+
+    class FlakyRetriever:
+        def search(self, question, advisor):
+            if advisor == 'hormozi':
+                raise RuntimeError('simulated retrieval failure')
+            return [{'chunk_id': f'{advisor}-1', 'source_id': f'{advisor}-1', 'advisor_id': advisor,
+                     'title': 'Title', 'url': 'https://example.com', 'text': 'Evidence text.',
+                     'attribution': 'Attribution.'}]
+
+    with patch.object(api_module, 'retriever', return_value=FlakyRetriever()):
+        client = TestClient(app)
+        response = client.post('/api/query', json={
+            'question': 'Example question about growth?', 'advisor': 'council', 'retrieval_only': True,
+        })
+
+    assert response.status_code == 200
+    results = {r['advisor']: r for r in response.json()['results']}
+    assert results['hormozi']['error'], 'the failed advisor must carry a non-empty error'
+    assert results['hormozi']['evidence'] == [], 'a failure must never fabricate evidence'
+    assert results['hormozi']['answer'] is None
+    for advisor in ('naval', 'kallaway'):
+        assert results[advisor]['error'] is None
+        assert results[advisor]['evidence'], f'{advisor} must keep its real evidence despite the other failure'
+
+
+
 def test_council_synthesis_flags_shared_terms_without_inventing_content():
     results=[
         {'advisor':'hormozi','answer':{'status':'answered','claims':[
@@ -67,9 +104,9 @@ def test_council_synthesis_flags_shared_terms_without_inventing_content():
     synthesis=synthesize_council(results)
     assert synthesis['advisors_answered']==['hormozi','naval']
     assert synthesis['advisors_abstained']==['kallaway']
-    assert synthesis['agreements'], 'shared vocabulary (effort/value) should surface as agreement'
+    assert synthesis['shared_topics'], 'shared vocabulary (effort/value) should surface as a shared topic'
     original_citations={'hormozi-1','naval-1'}
-    for group in (synthesis['agreements'], synthesis['distinct_perspectives']):
+    for group in (synthesis['shared_topics'], synthesis['distinct_perspectives']):
         for pair in group:
             for claim in pair['claims']:
                 assert set(claim['citations'])<=original_citations
@@ -83,20 +120,40 @@ def test_council_synthesis_without_shared_vocabulary_is_a_distinct_perspective()
             {'text':'Hooks rely on studying audience psychology.','citations':['kallaway-1']}]}},
     ]
     synthesis=synthesize_council(results)
-    assert not synthesis['agreements']
+    assert not synthesis['shared_topics']
     assert synthesis['distinct_perspectives']
 
 
-def test_council_synthesis_does_not_flag_a_negated_claim_pair_as_agreement():
-    # Regression case: high shared vocabulary used to be sufficient on its
-    # own to call two claims "agreement", even when one claim is the direct
-    # negation of the other.
-    results=[
+def test_council_synthesis_never_claims_semantic_agreement_even_on_high_overlap():
+    # A negation-based check used to try to keep contradicting claims out of
+    # the old "agreements" bucket. That approach doesn't hold up: a regex
+    # for "n't" can't match inside a contraction like "doesn't" (no word
+    # boundary sits between "sn" and "'t"), and a pure antonym pair like
+    # "improves" vs. "harms" carries no negation word for any regex to find
+    # in the first place -- there is no reliable keyword-based way to tell
+    # agreement from disagreement. So neither bucket claims agreement at
+    # all any more; both must expose the full claim text so a human reader
+    # can judge for themselves, for a contraction-negated pair and a
+    # pure-antonym pair alike.
+    negated_pair=[
         {'advisor':'hormozi','answer':{'status':'answered','claims':[
             {'text':'Increasing prices improves customer retention.','citations':['hormozi-3']}]}},
         {'advisor':'naval','answer':{'status':'answered','claims':[
-            {'text':'Increasing prices does not improve customer retention.','citations':['naval-2']}]}},
+            {'text':"Increasing prices doesn't improve customer retention.",'citations':['naval-2']}]}},
     ]
-    synthesis=synthesize_council(results)
-    assert not synthesis['agreements'], 'a claim and its direct negation must not be labelled agreement'
-    assert synthesis['distinct_perspectives']
+    antonym_pair=[
+        {'advisor':'hormozi','answer':{'status':'answered','claims':[
+            {'text':'Increasing prices improves customer retention.','citations':['hormozi-3']}]}},
+        {'advisor':'naval','answer':{'status':'answered','claims':[
+            {'text':'Increasing prices harms customer retention.','citations':['naval-2']}]}},
+    ]
+    for results in (negated_pair, antonym_pair):
+        synthesis=synthesize_council(results)
+        all_pairs=synthesis['shared_topics']+synthesis['distinct_perspectives']
+        assert len(all_pairs)==1, 'the one cross-advisor claim pair must land in exactly one bucket'
+        pair=all_pairs[0]
+        assert pair['claims'][0]['text'] and pair['claims'][1]['text'], \
+            'full claim text must always be present so a reader can judge agreement themselves'
+    note=synthesize_council(negated_pair)['note'].lower()
+    assert 'semantic' in note and 'agreement' in note, 'note must caveat that grouping is not a semantic judgement'
+

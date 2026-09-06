@@ -155,31 +155,28 @@ def _keywords(text: str) -> set[str]:
     return {w for w in re.findall(r"[a-z']+", text.lower()) if len(w) > 4 and w not in _STOPWORDS}
 
 
-# Shared vocabulary alone does not mean two claims agree: "prices improve
-# retention" and "prices does not improve retention" share most of their
-# significant words and would otherwise be flagged as "agreement". Negation
-# words are short (<=4 letters, e.g. "not"/"n't") so _keywords' length
-# filter already drops them from the shared-terms count -- which is exactly
-# why they went undetected before. This only checks whether the two claims
-# DIFFER in negation, so it can't flip a real disagreement into a false
-# agreement between two claims that are both negated the same way.
-_NEGATION_RE = re.compile(
-    r"\b(not|n't|never|no longer|without|lacks?|lacking)\b", re.I
-)
-
-
-def _negated(text: str) -> bool:
-    return bool(_NEGATION_RE.search(text))
-
-
 def synthesize_council(results: list[dict]) -> dict:
     """Deterministic, offline structural comparison across advisor answers.
 
     Never invents a new claim: it only reorganises claims and citations that
-    each advisor's own validated Answer already produced. "Agreement" and
-    "distinct perspective" are a lexical-overlap heuristic over claim text,
-    not a semantic judgement that advisors actually agree or disagree, and no
-    additional model call is made.
+    each advisor's own validated Answer already produced.
+
+    An earlier version tried to distinguish "agreement" from "distinct
+    perspective" using shared-keyword count, with a negation check added to
+    catch cases like "improves" vs. "does not improve". That approach does
+    not hold up: a negation regex misses contractions it should catch
+    ("doesn't" has no word-bounded "n't" substring to match), and -- more
+    fundamentally -- two claims can flatly contradict each other with NO
+    negation word at all ("prices improve retention" vs. "prices harm
+    retention"). No amount of keyword-list tuning closes that gap, because
+    it isn't a vocabulary problem; it's a semantic-understanding problem
+    that a lexical-overlap heuristic cannot solve. So this makes no
+    agreement/disagreement claim at all: "shared_topics" means only that two
+    claims from different advisors use a lot of the same significant words,
+    and "distinct_perspectives" means they mostly don't. Both buckets always
+    carry the full text of both claims, specifically so a human reader can
+    see for themselves whether the advisors actually agree, rather than
+    trusting a label that can't reliably tell the difference.
     """
     answered = [r for r in results if r.get("answer") and r["answer"]["status"] == "answered"]
     abstained = [r["advisor"] for r in results if not r.get("answer") or r["answer"]["status"] != "answered"]
@@ -187,21 +184,20 @@ def synthesize_council(results: list[dict]) -> dict:
     claims = [{"advisor": r["advisor"], "text": c["text"], "citations": c["citations"], "keywords": _keywords(c["text"])}
               for r in answered for c in r["answer"]["claims"]]
 
-    agreements, distinct = [], []
+    shared_topics, distinct = [], []
     for i in range(len(claims)):
         for j in range(i + 1, len(claims)):
             a, b = claims[i], claims[j]
             if a["advisor"] == b["advisor"]:
                 continue
             shared = sorted(a["keywords"] & b["keywords"])
-            conflicting_negation = _negated(a["text"]) != _negated(b["text"])
             pair = {"advisors": [a["advisor"], b["advisor"]], "shared_terms": shared,
                      "claims": [{"advisor": a["advisor"], "text": a["text"], "citations": a["citations"]},
                                 {"advisor": b["advisor"], "text": b["text"], "citations": b["citations"]}]}
-            is_agreement = len(shared) >= 2 and not conflicting_negation
-            (agreements if is_agreement else distinct).append(pair)
+            (shared_topics if len(shared) >= 2 else distinct).append(pair)
 
     return {"advisors_answered": [r["advisor"] for r in answered], "advisors_abstained": abstained,
-            "agreements": agreements, "distinct_perspectives": distinct,
-            "note": ("Agreement and distinct-perspective pairs come from a lexical-overlap heuristic over each "
-                     "advisor's own cited claims, not a semantic judgement of whether the advisors actually agree.")}
+            "shared_topics": shared_topics, "distinct_perspectives": distinct,
+            "note": ("\"shared_topics\" and \"distinct_perspectives\" reflect lexical overlap over each advisor's "
+                     "own cited claims only -- NOT a semantic judgement of agreement or disagreement. Read both "
+                     "claims yourself: advisors grouped under shared_topics can still be saying opposite things.")}

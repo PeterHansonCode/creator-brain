@@ -19,6 +19,7 @@ import re
 import sys
 import time
 import urllib.request
+from html.parser import HTMLParser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,23 +56,8 @@ PAGES = [
     ("tokens", "Waste Tokens, Save Time"),
 ]
 
-# nav.al has at least two page templates: newer Gutenberg-block posts use
-# <p class="wp-block-paragraph"><strong>Naval:</strong> ...</p>; older posts
-# use plain <p><b>Naval: </b><span ...>...</span></p>. A third variant (seen
-# on /rich) wraps the label itself in an inline element, e.g.
-# <span class="s4"><strong>Nivi:</strong></span> ... -- the anchored regex
-# below used to require <strong>/<b> literally first, so wrapped labels like
-# that were invisible to it and got silently folded into whoever was
-# "currently speaking", which in practice meant co-host dialogue getting
-# attributed to Naval. (Confirmed in the wild: naval-rich shipped with 14
-# un-caught "Nivi:" labels before this fix.) Now tolerant of arbitrary
-# inline wrapper tags immediately before/after the bold element.
-BOLD_RE = re.compile(
-    r"^(?:<[a-zA-Z][^>]*>\s*)*<(strong|b)[^>]*>(.*?)</\1>\s*(?:</[a-zA-Z][^>]*>\s*)*(.*)$",
-    re.S,
-)
 TAG_RE = re.compile(r"<[^>]+>")
-LABEL_RE = re.compile(r"^\s*([A-Za-z][A-Za-z .]{1,24}?)\s*:\s*(?:&nbsp;)?\s*$")
+LABEL_RE = re.compile(r"^\s*([A-Za-z][A-Za-z .]{1,24}?)\s*:\s*$")
 PARA_RE = re.compile(r"<p[^>]*>(.*?)</p>", re.S)
 
 
@@ -80,6 +66,54 @@ def clean(text: str) -> str:
     text = text.replace("&nbsp;", " ").replace("&#8217;", "’").replace("&#8220;", "“")
     text = text.replace("&#8221;", "”").replace("&amp;", "&")
     return re.sub(r"\s+", " ", text).strip()
+
+
+class _ParagraphRuns(HTMLParser):
+    """Splits one paragraph's inner HTML into consecutive (text, is_bold)
+    runs, where is_bold is True while inside ANY <strong>/<b> ancestor at
+    any nesting depth.
+
+    Replaces an earlier approach that used a single anchored regex to check
+    whether a paragraph's raw HTML started with a literal <strong>/<b> tag.
+    That regex was patched once already to tolerate one specific wrapper
+    pattern (<span><strong>Name:</strong></span>), but nav.al also uses the
+    REVERSE nesting (<strong><span>Name:</span></strong>) elsewhere, which
+    the patched regex still can't see -- lazily matching raw HTML text
+    between <strong> and </strong> just isn't tag-aware, no matter how many
+    wrapper variants get added to the regex. Walking the actual parse tree
+    with a real (if minimal) HTML parser handles arbitrary nesting in either
+    direction, and any nesting depth, without needing a new special case
+    each time nav.al's markup turns out to nest one way we hadn't seen yet.
+    """
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self._bold_depth = 0
+        self.runs: list = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("strong", "b"):
+            self._bold_depth += 1
+
+    def handle_endtag(self, tag):
+        if tag in ("strong", "b") and self._bold_depth > 0:
+            self._bold_depth -= 1
+
+    def handle_data(self, data):
+        is_bold = self._bold_depth > 0
+        if self.runs and self.runs[-1][1] == is_bold:
+            self.runs[-1][0] += data
+        else:
+            self.runs.append([data, is_bold])
+
+
+def paragraph_runs(raw_html: str) -> list:
+    """Returns [(text, is_bold), ...] for one paragraph's inner HTML, with
+    whitespace collapsed and pure-whitespace runs dropped."""
+    parser = _ParagraphRuns()
+    parser.feed(raw_html)
+    parser.close()
+    runs = [(re.sub(r"\s+", " ", text), is_bold) for text, is_bold in parser.runs]
+    return [(text, is_bold) for text, is_bold in runs if text.strip()]
 
 
 def extract_naval_text(html: str, slug: str = "", debug_dir: Path = None):
@@ -106,29 +140,31 @@ def extract_naval_text(html: str, slug: str = "", debug_dir: Path = None):
     kept = []
     unlabeled_fallback = []
     for raw in paras:
-        stripped = raw.strip()
-        m = BOLD_RE.match(stripped)
-        if m:
-            label_text, rest = m.group(2), m.group(3)
-            if LABEL_RE.match(label_text):
-                # A new speaker turn begins here.
-                saw_any_label = True
-                current_speaker = clean(label_text).rstrip(":").strip()
-                rest_clean = clean(rest)
-                if current_speaker.lower() == "naval" and rest_clean:
-                    kept.append(rest_clean)
-                continue
-            if not rest.strip():
-                # Whole paragraph is just a bolded pull-quote/subheading
-                # (no colon, nothing after it) -> skip, don't change speaker.
-                continue
-            # A bolded lead-in phrase followed by more text in the same
-            # paragraph, but not a "Name:" label -> fall through and treat
-            # the whole paragraph as ordinary continuation text below.
-        text = clean(raw)
+        runs = paragraph_runs(raw)
+        if not runs:
+            continue
+        first_text, first_bold = runs[0]
+        stripped_first = first_text.strip()
+        if first_bold and LABEL_RE.match(stripped_first):
+            # A new speaker turn begins here, however the label element
+            # happens to be nested -- everything after the bold run is that
+            # speaker's own paragraph-opening words.
+            saw_any_label = True
+            current_speaker = stripped_first.rstrip(":").strip()
+            rest_clean = " ".join(t.strip() for t, _ in runs[1:]).strip()
+            if current_speaker.lower() == "naval" and rest_clean:
+                kept.append(rest_clean)
+            continue
+        if first_bold and len(runs) == 1:
+            # Whole paragraph is just a bolded pull-quote/subheading (no
+            # colon, nothing after it) -> skip, don't change speaker.
+            continue
+        # Either no bold at the start, or a bolded lead-in phrase that isn't
+        # a "Name:" label with more text following it -> the whole paragraph
+        # is ordinary continuation text of whoever is currently speaking.
+        text = " ".join(t.strip() for t, _ in runs).strip()
         if text:
             unlabeled_fallback.append(text)
-        # Unlabeled paragraph: continuation of whoever is currently speaking.
         if current_speaker and current_speaker.lower() == "naval":
             if text:
                 kept.append(text)
@@ -179,18 +215,31 @@ def main():
         words = words[:15000]
         text = " ".join(words)
         source_id = f"naval-{slug}"
+        if note and "solo Naval text" in note:
+            # This page had no speaker labels anywhere, so nothing was
+            # actually filtered by speaker turn -- the whole page was kept
+            # on the presumption that an unlabeled page is Naval's own solo
+            # writing. Saying "kept only paragraphs attributed to him by
+            # speaker label" here would overclaim what the parser did.
+            attribution = (
+                "Text extracted from Naval's own site (nav.al). This page had no speaker "
+                "labels at all, so the whole page was kept as presumed solo Naval writing "
+                "rather than filtered by speaker turn -- not a manually verified quotation."
+            )
+        else:
+            attribution = (
+                "Text extracted from Naval's own site (nav.al), keeping only paragraphs "
+                "attributed to him (by explicit speaker label or as a continuation of his "
+                "own labeled turn); co-host/guest dialogue and site narration outside his "
+                "turns is excluded. Not a manually verified quotation."
+            )
         sources.append({
             "source_id": source_id,
             "advisor_id": "naval",
             "title": title,
             "url": url,
             "text": text,
-            "attribution": (
-                "Text extracted from Naval's own site (nav.al), keeping only paragraphs "
-                "attributed to him (by explicit speaker label or as a continuation of his "
-                "own labeled turn); co-host/guest dialogue and site narration outside his "
-                "turns is excluded. Not a manually verified quotation."
-            ),
+            "attribution": attribution,
         })
         summary.append({"source_id": source_id, "title": title, "url": url, "word_count": len(words)})
         print(f"OK   {slug}: {len(words)} words -- {title}")

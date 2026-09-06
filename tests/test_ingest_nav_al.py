@@ -66,3 +66,34 @@ def test_page_with_no_labels_at_all_falls_back_to_solo_essay():
     text, note = extract_naval_text(html)
     assert "essay with no dialogue" in text
     assert note is not None and "solo" in note
+
+
+def test_reverse_nested_label_switches_speaker_away_from_naval():
+    # A second independent review reproduced a case the first fix missed:
+    # nav.al also nests some labels the OTHER way around, <strong><span>
+    # Nivi:</span></strong>, rather than <span><strong>...</strong></span>.
+    # A single anchored regex tuned for one nesting order can't see the
+    # other -- this needs the run-based parser to keep working regardless
+    # of which element wraps which.
+    html = page(
+        '<p><strong>Naval:</strong> His actual view on luck.</p>'
+        '<p><strong><span class="s4">Nivi:</span></strong> That is an interesting take on luck.</p>'
+        '<p>Do you think that generalizes to other people too?</p>'
+        '<p><strong>Naval:</strong> Yes, I think it does generalize well.</p>'
+    )
+    text, note = extract_naval_text(html)
+    assert "interesting take" not in text
+    assert "generalizes to other people" not in text
+    assert "His actual view on luck" in text
+    assert "generalize well" in text
+
+
+def test_label_with_trailing_nbsp_inside_the_bold_run_is_still_recognized():
+    # Some pages put a non-breaking space *inside* the bold element itself,
+    # e.g. <strong>Naval:&nbsp;</strong>, rather than after it. Python's
+    # html.parser decodes &nbsp; to U+00A0 before LABEL_RE ever sees it, and
+    # str.strip() treats U+00A0 as whitespace too, so this should match the
+    # same as a plain ASCII space would.
+    html = page('<p><strong>Naval:&nbsp;</strong>Wealth compounds while you sleep.</p>')
+    text, note = extract_naval_text(html)
+    assert "Wealth compounds" in text

@@ -79,15 +79,18 @@ def query(payload: Query):
     results=[]
     # Each advisor is isolated: one advisor's model/embedding failure must
     # not discard the other advisors' already-successful, grounded answers
-    # in the same council request. Falls back to an empty (not invented)
-    # result for that advisor only, rendered the same as an abstention.
+    # in the same council request. A failed advisor gets an explicit 'error'
+    # field (never fabricated evidence or an invented answer) so the UI can
+    # say what happened instead of silently rendering an empty result that
+    # looks identical to "this advisor had nothing relevant to say".
     for advisor in ADVISORS if payload.advisor=='council' else [payload.advisor]:
         try:
             evidence=retriever().search(payload.question,advisor)
             answer=None if payload.retrieval_only else answer_question(payload.question,evidence).model_dump()
-            results.append({'advisor':advisor,'answer':answer,'evidence':evidence})
+            results.append({'advisor':advisor,'answer':answer,'evidence':evidence,'error':None})
         except Exception:
-            results.append({'advisor':advisor,'answer':None,'evidence':[]})
+            results.append({'advisor':advisor,'answer':None,'evidence':[],
+                             'error':'This advisor could not produce a grounded answer right now.'})
     if not any(r['evidence'] or r['answer'] for r in results):
         # Do not expose model content, filesystem paths or request data in errors.
         raise HTTPException(503,'Cannot produce a grounded answer. Check the local model and embedding setup; no fallback answer was invented.')
