@@ -155,6 +155,23 @@ def _keywords(text: str) -> set[str]:
     return {w for w in re.findall(r"[a-z']+", text.lower()) if len(w) > 4 and w not in _STOPWORDS}
 
 
+# Shared vocabulary alone does not mean two claims agree: "prices improve
+# retention" and "prices does not improve retention" share most of their
+# significant words and would otherwise be flagged as "agreement". Negation
+# words are short (<=4 letters, e.g. "not"/"n't") so _keywords' length
+# filter already drops them from the shared-terms count -- which is exactly
+# why they went undetected before. This only checks whether the two claims
+# DIFFER in negation, so it can't flip a real disagreement into a false
+# agreement between two claims that are both negated the same way.
+_NEGATION_RE = re.compile(
+    r"\b(not|n't|never|no longer|without|lacks?|lacking)\b", re.I
+)
+
+
+def _negated(text: str) -> bool:
+    return bool(_NEGATION_RE.search(text))
+
+
 def synthesize_council(results: list[dict]) -> dict:
     """Deterministic, offline structural comparison across advisor answers.
 
@@ -177,10 +194,12 @@ def synthesize_council(results: list[dict]) -> dict:
             if a["advisor"] == b["advisor"]:
                 continue
             shared = sorted(a["keywords"] & b["keywords"])
+            conflicting_negation = _negated(a["text"]) != _negated(b["text"])
             pair = {"advisors": [a["advisor"], b["advisor"]], "shared_terms": shared,
                      "claims": [{"advisor": a["advisor"], "text": a["text"], "citations": a["citations"]},
                                 {"advisor": b["advisor"], "text": b["text"], "citations": b["citations"]}]}
-            (agreements if len(shared) >= 2 else distinct).append(pair)
+            is_agreement = len(shared) >= 2 and not conflicting_negation
+            (agreements if is_agreement else distinct).append(pair)
 
     return {"advisors_answered": [r["advisor"] for r in answered], "advisors_abstained": abstained,
             "agreements": agreements, "distinct_perspectives": distinct,

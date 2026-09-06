@@ -1,7 +1,7 @@
 import pytest
 
 from brain.core import Answer, chunks, load_sources, validate_answer, answer_question, synthesize_council
-from brain.evaluate import evaluate, gate
+from brain.evaluate import evaluate, gate, questions_fingerprint
 
 
 def test_chunk_ids_are_stable_and_content_sensitive():
@@ -32,6 +32,20 @@ def test_gate_rejects_regression_and_empty_cases():
     assert not gate({**good,'advisor_isolation':False},good)
     assert not gate({**good,'cases':0},good)
     with pytest.raises(ValueError):evaluate(None,[])
+
+
+def test_gate_rejects_a_swapped_question_set_of_the_same_size():
+    # Same case count alone used to be accepted as "no benchmark change",
+    # so replacing the questions with an easier set of the same size would
+    # silently pass. The gate must also check question identity.
+    cases_a=[{'id':'n1','query':'Original question?','advisor':'naval','split':'dev','expected':['naval-x']}]
+    cases_b=[{'id':'n1','query':'A much easier question?','advisor':'naval','split':'dev','expected':['naval-x']}]
+    good={'cases':1,'advisor_isolation':True,'mrr':1.0,'recall_at_3':1.0,
+          'questions_sha256':questions_fingerprint(cases_a)}
+    same_questions={**good,'questions_sha256':questions_fingerprint(cases_a)}
+    swapped_questions={**good,'questions_sha256':questions_fingerprint(cases_b)}
+    assert gate(same_questions,good)
+    assert not gate(swapped_questions,good)
 
 
 def test_api_rejects_invalid_advisor_and_foreign_origin():
@@ -70,4 +84,19 @@ def test_council_synthesis_without_shared_vocabulary_is_a_distinct_perspective()
     ]
     synthesis=synthesize_council(results)
     assert not synthesis['agreements']
+    assert synthesis['distinct_perspectives']
+
+
+def test_council_synthesis_does_not_flag_a_negated_claim_pair_as_agreement():
+    # Regression case: high shared vocabulary used to be sufficient on its
+    # own to call two claims "agreement", even when one claim is the direct
+    # negation of the other.
+    results=[
+        {'advisor':'hormozi','answer':{'status':'answered','claims':[
+            {'text':'Increasing prices improves customer retention.','citations':['hormozi-3']}]}},
+        {'advisor':'naval','answer':{'status':'answered','claims':[
+            {'text':'Increasing prices does not improve customer retention.','citations':['naval-2']}]}},
+    ]
+    synthesis=synthesize_council(results)
+    assert not synthesis['agreements'], 'a claim and its direct negation must not be labelled agreement'
     assert synthesis['distinct_perspectives']

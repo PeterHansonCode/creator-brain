@@ -20,6 +20,19 @@ async def local_only(request: Request, call_next):
     if origin and origin != f'http://{host}':
         return JSONResponse({'detail':'Cross-origin requests refused.'}, status_code=403)
     if request.method == 'POST':
+        # Reject an oversized request before buffering it, using the
+        # declared Content-Length -- await request.body() used to run
+        # first, meaning a large request was already fully read into
+        # memory before its size was checked. A client that lies about (or
+        # omits) Content-Length still gets caught below, but a well-behaved
+        # oversized request no longer costs the memory in the first place.
+        declared_length = request.headers.get('content-length')
+        if declared_length is not None:
+            try:
+                if int(declared_length) > 16000:
+                    return JSONResponse({'detail':'Request too large.'}, status_code=413)
+            except ValueError:
+                return JSONResponse({'detail':'Invalid Content-Length.'}, status_code=400)
         body = await request.body()
         if len(body) > 16000:
             return JSONResponse({'detail':'Request too large.'}, status_code=413)
@@ -63,17 +76,23 @@ def sources():
 @app.post('/api/query')
 def query(payload: Query):
     started=perf_counter()
-    try:
-        results=[]
-        for advisor in ADVISORS if payload.advisor=='council' else [payload.advisor]:
+    results=[]
+    # Each advisor is isolated: one advisor's model/embedding failure must
+    # not discard the other advisors' already-successful, grounded answers
+    # in the same council request. Falls back to an empty (not invented)
+    # result for that advisor only, rendered the same as an abstention.
+    for advisor in ADVISORS if payload.advisor=='council' else [payload.advisor]:
+        try:
             evidence=retriever().search(payload.question,advisor)
             answer=None if payload.retrieval_only else answer_question(payload.question,evidence).model_dump()
             results.append({'advisor':advisor,'answer':answer,'evidence':evidence})
-        synthesis=synthesize_council(results) if (payload.advisor=='council' and not payload.retrieval_only) else None
-        return {'results':results,'duration_ms':round((perf_counter()-started)*1000),
-                'mode':'retrieval-only' if payload.retrieval_only else 'local-llm',
-                'council_synthesis':synthesis,
-                'comparison_note':'Compare the attributed findings below. Differences are not necessarily disagreements; this small corpus may not cover every perspective.'}
-    except Exception as e:
+        except Exception:
+            results.append({'advisor':advisor,'answer':None,'evidence':[]})
+    if not any(r['evidence'] or r['answer'] for r in results):
         # Do not expose model content, filesystem paths or request data in errors.
-        raise HTTPException(503,'Cannot produce a grounded answer. Check the local model and embedding setup; no fallback answer was invented.') from e
+        raise HTTPException(503,'Cannot produce a grounded answer. Check the local model and embedding setup; no fallback answer was invented.')
+    synthesis=synthesize_council(results) if (payload.advisor=='council' and not payload.retrieval_only) else None
+    return {'results':results,'duration_ms':round((perf_counter()-started)*1000),
+            'mode':'retrieval-only' if payload.retrieval_only else 'local-llm',
+            'council_synthesis':synthesis,
+            'comparison_note':'Compare the attributed findings below. Differences are not necessarily disagreements; this small corpus may not cover every perspective.'}

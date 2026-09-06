@@ -57,8 +57,19 @@ PAGES = [
 
 # nav.al has at least two page templates: newer Gutenberg-block posts use
 # <p class="wp-block-paragraph"><strong>Naval:</strong> ...</p>; older posts
-# use plain <p><b>Naval: </b><span ...>...</span></p>. Handle both.
-BOLD_RE = re.compile(r"^<(strong|b)>(.*?)</\1>\s*(.*)$", re.S)
+# use plain <p><b>Naval: </b><span ...>...</span></p>. A third variant (seen
+# on /rich) wraps the label itself in an inline element, e.g.
+# <span class="s4"><strong>Nivi:</strong></span> ... -- the anchored regex
+# below used to require <strong>/<b> literally first, so wrapped labels like
+# that were invisible to it and got silently folded into whoever was
+# "currently speaking", which in practice meant co-host dialogue getting
+# attributed to Naval. (Confirmed in the wild: naval-rich shipped with 14
+# un-caught "Nivi:" labels before this fix.) Now tolerant of arbitrary
+# inline wrapper tags immediately before/after the bold element.
+BOLD_RE = re.compile(
+    r"^(?:<[a-zA-Z][^>]*>\s*)*<(strong|b)[^>]*>(.*?)</\1>\s*(?:</[a-zA-Z][^>]*>\s*)*(.*)$",
+    re.S,
+)
 TAG_RE = re.compile(r"<[^>]+>")
 LABEL_RE = re.compile(r"^\s*([A-Za-z][A-Za-z .]{1,24}?)\s*:\s*(?:&nbsp;)?\s*$")
 PARA_RE = re.compile(r"<p[^>]*>(.*?)</p>", re.S)

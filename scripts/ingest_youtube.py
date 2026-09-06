@@ -41,7 +41,7 @@ ID_RE = re.compile(r"\[([A-Za-z0-9_-]{11})\]$")
 def clean_transcript(path: Path) -> str:
     """Strip VTT syntax if present; degrades gracefully on plain .txt too."""
     lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
-    seen, out = set(), []
+    out = []
     for raw in lines:
         line = raw.strip()
         if not line or line.startswith(("WEBVTT", "Kind:", "Language:", "NOTE")):
@@ -56,8 +56,12 @@ def clean_transcript(path: Path) -> str:
         # spoken words -- drop standalone runs of them.
         line = re.sub(r"(?:^|\s)[<>]{2,}(?:\s|$)", " ", line)
         line = " ".join(line.split())
-        if line and line not in seen:
-            seen.add(line)
+        # Rolling VTT captions repeat the immediately preceding cue's text
+        # verbatim as later cues grow it word by word -- only that adjacent
+        # repetition should be dropped. A global "seen anywhere" set (the
+        # previous approach) also silently dropped genuine repeated speech
+        # elsewhere in a long video, e.g. someone saying "I agree" twice.
+        if line and line != (out[-1] if out else None):
             out.append(line)
     return " ".join(out)
 
