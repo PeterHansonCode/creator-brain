@@ -8,7 +8,7 @@ def test_chunk_ids_are_stable_and_content_sensitive():
     sources=load_sources()
     first=chunks(sources)
     assert first==chunks(sources)
-    sources[0].text+=' An additional original note.'
+    sources[0].text='An additional original note. '+sources[0].text  # prepend: guaranteed to fall inside chunk 0's window regardless of source length
     assert chunks(sources)[0]['chunk_id']!=first[0]['chunk_id']
 
 

@@ -11,3 +11,4 @@ eval/runs/
 recordings/
 *.log
 ingest_captions/
+data/sample/naval_site_debug_html/

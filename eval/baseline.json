@@ -1,21 +1,9 @@
 {
   "cases": 9,
-  "recall_at_3": 1.0,
-  "mrr": 0.8888888888888888,
+  "recall_at_3": 0.7777777777777778,
+  "mrr": 0.5925925925925926,
   "advisor_isolation": true,
   "details": [
-    {
-      "id": "h1",
-      "recall_at_3": 1.0,
-      "reciprocal_rank": 1.0,
-      "isolated": true
-    },
-    {
-      "id": "h2",
-      "recall_at_3": 1.0,
-      "reciprocal_rank": 1.0,
-      "isolated": true
-    },
     {
       "id": "n1",
       "recall_at_3": 1.0,
@@ -29,13 +17,19 @@
       "isolated": true
     },
     {
-      "id": "k1",
+      "id": "n3",
       "recall_at_3": 1.0,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 1.0,
       "isolated": true
     },
     {
-      "id": "k2",
+      "id": "h1",
+      "recall_at_3": 0.0,
+      "reciprocal_rank": 0,
+      "isolated": true
+    },
+    {
+      "id": "h2",
       "recall_at_3": 1.0,
       "reciprocal_rank": 1.0,
       "isolated": true
@@ -43,21 +37,27 @@
     {
       "id": "h3",
       "recall_at_3": 1.0,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.5,
       "isolated": true
     },
     {
-      "id": "n3",
+      "id": "k1",
       "recall_at_3": 1.0,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.5,
+      "isolated": true
+    },
+    {
+      "id": "k2",
+      "recall_at_3": 0.0,
+      "reciprocal_rank": 0,
       "isolated": true
     },
     {
       "id": "k3",
       "recall_at_3": 1.0,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 0.3333333333333333,
       "isolated": true
     }
   ],
-  "corpus_sha256": "f7291d1897aeed72a9420d530babefba050b9fa6a37e98a6d8f21378f71458f8"
+  "corpus_sha256": "ffca6b6234a12517226b9eb38e8751d804724ffe9db8188c167bc852c09c9a16"
 }

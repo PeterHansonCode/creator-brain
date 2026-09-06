@@ -1,11 +1,11 @@
 [
- {"id":"h1","split":"dev","advisor":"hormozi","query":"How can I make an offer more attractive without just cutting the price?","expected":["hormozi-value"]},
- {"id":"h2","split":"dev","advisor":"hormozi","query":"What makes a bonus useful for customers?","expected":["hormozi-bonuses"]},
- {"id":"n1","split":"dev","advisor":"naval","query":"How can software amplify output without hiring more people?","expected":["naval-leverage"]},
- {"id":"n2","split":"dev","advisor":"naval","query":"Where does distinctive expertise come from?","expected":["naval-knowledge"]},
- {"id":"k1","split":"dev","advisor":"kallaway","query":"Why use a repeatable process for short video openings?","expected":["kallaway-hooks"]},
- {"id":"k2","split":"dev","advisor":"kallaway","query":"How does understanding viewer psychology relate to hooks?","expected":["kallaway-psychology"]},
- {"id":"h3","split":"holdout","advisor":"hormozi","query":"Would reducing the customer's work and wait improve perceived value?","expected":["hormozi-value"]},
- {"id":"n3","split":"holdout","advisor":"naval","query":"What can I create once and distribute many times without asking investors?","expected":["naval-leverage"]},
- {"id":"k3","split":"holdout","advisor":"kallaway","query":"What is the argument for systematically designing the start of a video?","expected":["kallaway-hooks"]}
+ {"id":"n1","split":"dev","advisor":"naval","query":"Why shouldn't I bet everything on one wager, even if the odds are in my favor?","expected":["naval-kelly-criterion"]},
+ {"id":"n2","split":"dev","advisor":"naval","query":"Can envy ever be a useful signal instead of just a bad feeling?","expected":["naval-envy"]},
+ {"id":"n3","split":"holdout","advisor":"naval","query":"How can two people coordinate on meeting up without ever communicating directly?","expected":["naval-schelling-point"]},
+ {"id":"h1","split":"dev","advisor":"hormozi","query":"I have no audience yet -- what should I actually focus on before trying to grow one?","expected":["hormozi-how-to-grow-an-audience-if-you-have-0-fo-74fdc6"]},
+ {"id":"h2","split":"dev","advisor":"hormozi","query":"How did ChatGPT's early user growth compare to other tech platforms when it launched?","expected":["hormozi-get-rich-in-the-a-i-revolution-2023-8a8f6f"]},
+ {"id":"h3","split":"holdout","advisor":"hormozi","query":"What would you tell someone in their 20s asking where to invest a small amount of spare money?","expected":["hormozi-how-i-would-invest-1000-if-i-were-in-my--e0897f"]},
+ {"id":"k1","split":"dev","advisor":"kallaway","query":"Is there a simple set of words that makes a video hook work, without needing a complex formula?","expected":["kallaway-the-only-6-words-you-need-to-hook-any-vi-f15223"]},
+ {"id":"k2","split":"dev","advisor":"kallaway","query":"What's the core psychological skill behind getting viewers hooked on content?","expected":["kallaway-18-psychology-tricks-to-get-viewers-addi-2a90da"]},
+ {"id":"k3","split":"holdout","advisor":"kallaway","query":"How do social media algorithms actually decide which videos to push to more people?","expected":["kallaway-how-social-media-algorithms-actually-wor-07e300"]}
 ]
