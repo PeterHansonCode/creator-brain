@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from .core import ROOT, ADVISORS, Embeddings, Retriever, load_sources, answer_question
+from .core import ROOT, ADVISORS, Embeddings, Retriever, load_sources, answer_question, synthesize_council
 
 app = FastAPI(title="Creator Brain", docs_url="/docs")
 
@@ -69,8 +69,10 @@ def query(payload: Query):
             evidence=retriever().search(payload.question,advisor)
             answer=None if payload.retrieval_only else answer_question(payload.question,evidence).model_dump()
             results.append({'advisor':advisor,'answer':answer,'evidence':evidence})
+        synthesis=synthesize_council(results) if (payload.advisor=='council' and not payload.retrieval_only) else None
         return {'results':results,'duration_ms':round((perf_counter()-started)*1000),
                 'mode':'retrieval-only' if payload.retrieval_only else 'local-llm',
+                'council_synthesis':synthesis,
                 'comparison_note':'Compare the attributed findings below. Differences are not necessarily disagreements; this small corpus may not cover every perspective.'}
     except Exception as e:
         # Do not expose model content, filesystem paths or request data in errors.

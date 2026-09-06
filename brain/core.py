@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 
 import chromadb
@@ -143,3 +144,45 @@ def answer_question(query: str, evidence: list[dict]) -> Answer:
     raw=json.loads(response.json()["message"]["content"])
     raw['status']='answered' if raw.get('claims') else 'insufficient_evidence'
     return validate_answer(raw, evidence)
+
+
+_STOPWORDS = {"about", "after", "again", "their", "there", "these", "those", "which", "while",
+              "would", "should", "could", "other", "being", "doing", "every", "first", "people",
+              "things", "think", "because", "before"}
+
+
+def _keywords(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z']+", text.lower()) if len(w) > 4 and w not in _STOPWORDS}
+
+
+def synthesize_council(results: list[dict]) -> dict:
+    """Deterministic, offline structural comparison across advisor answers.
+
+    Never invents a new claim: it only reorganises claims and citations that
+    each advisor's own validated Answer already produced. "Agreement" and
+    "distinct perspective" are a lexical-overlap heuristic over claim text,
+    not a semantic judgement that advisors actually agree or disagree, and no
+    additional model call is made.
+    """
+    answered = [r for r in results if r.get("answer") and r["answer"]["status"] == "answered"]
+    abstained = [r["advisor"] for r in results if not r.get("answer") or r["answer"]["status"] != "answered"]
+
+    claims = [{"advisor": r["advisor"], "text": c["text"], "citations": c["citations"], "keywords": _keywords(c["text"])}
+              for r in answered for c in r["answer"]["claims"]]
+
+    agreements, distinct = [], []
+    for i in range(len(claims)):
+        for j in range(i + 1, len(claims)):
+            a, b = claims[i], claims[j]
+            if a["advisor"] == b["advisor"]:
+                continue
+            shared = sorted(a["keywords"] & b["keywords"])
+            pair = {"advisors": [a["advisor"], b["advisor"]], "shared_terms": shared,
+                     "claims": [{"advisor": a["advisor"], "text": a["text"], "citations": a["citations"]},
+                                {"advisor": b["advisor"], "text": b["text"], "citations": b["citations"]}]}
+            (agreements if len(shared) >= 2 else distinct).append(pair)
+
+    return {"advisors_answered": [r["advisor"] for r in answered], "advisors_abstained": abstained,
+            "agreements": agreements, "distinct_perspectives": distinct,
+            "note": ("Agreement and distinct-perspective pairs come from a lexical-overlap heuristic over each "
+                     "advisor's own cited claims, not a semantic judgement of whether the advisors actually agree.")}

@@ -25,7 +25,7 @@ Question -> embedding -> advisor filter -> ranked excerpts
   -> Qwen3 structured claims -> citation validation -> linked answers
 ```
 
-Council mode currently shows separately grounded findings side by side. It does not yet generate a cross-advisor synthesis or assert disagreements. Chroma indexes the small corpus in memory using stable IDs. No public hosting or MCP wrapper is included.
+Council mode shows each advisor's grounded findings plus a deterministic synthesis: a lexical-overlap heuristic over the advisors' own already-cited claims surfaces shared themes ("agreement") versus claims with no shared vocabulary ("distinct perspectives"). This is a structural comparison, not a semantic judgement and not a new model call — it can never invent a claim beyond what an advisor's individual answer already cited, and it stays fully offline-testable. Chroma indexes the small corpus in memory using stable IDs. No public hosting or MCP wrapper is included.
 
 ## Evaluate without a running model
 
@@ -41,7 +41,7 @@ The committed cache contains real MiniLM vectors for public sample texts and lab
 
 Initial local results: **MRR 0.889 across 9 questions**, recall@3 1.0, no cross-advisor results; degraded retrieval failed. With only two documents per advisor, recall@3 is trivial and not a useful headline. Three questions labelled holdout were included in this initial final run and are now exposed. This is a tiny development benchmark, not broad accuracy evidence.
 
-Five contract tests cover chunk stability, foreign citations, abstention, regression rejection and API boundaries. A real Naval answer was generated and checked against its excerpts (around 12 seconds in the observed run). All-advisor live testing and user acceptance remain. GitHub Actions is configured but remote execution is not verified. Required repository checks must be configured separately to block merging.
+Seven contract tests cover chunk stability, foreign citations, abstention, regression rejection, API boundaries, and council synthesis (agreement/distinct-perspective detection, plus a check that synthesis citations always trace back to an advisor's own cited evidence). A real Naval answer was generated and checked against its excerpts (around 12 seconds in the observed run). All-advisor live testing and user acceptance remain. GitHub Actions is configured but remote execution is not verified. Required repository checks must be configured separately to block merging.
 
 ## Sources and limits
 
