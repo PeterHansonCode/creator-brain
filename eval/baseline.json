@@ -1,7 +1,7 @@
 {
   "cases": 9,
-  "recall_at_3": 0.7777777777777778,
-  "mrr": 0.5925925925925926,
+  "recall_at_3": 0.6666666666666666,
+  "mrr": 0.5555555555555556,
   "advisor_isolation": true,
   "details": [
     {
@@ -54,10 +54,11 @@
     },
     {
       "id": "k3",
-      "recall_at_3": 1.0,
-      "reciprocal_rank": 0.3333333333333333,
+      "recall_at_3": 0.0,
+      "reciprocal_rank": 0,
       "isolated": true
     }
   ],
-  "corpus_sha256": "ffca6b6234a12517226b9eb38e8751d804724ffe9db8188c167bc852c09c9a16"
+  "corpus_sha256": "f0bf630f2ccb4448cdd23e646e1708301c736e876112d9b08cf32ca1835abda2",
+  "questions_sha256": "b23d816c4faf1b1cd384c180f346d34dc32659d00c7fef462ebe41cfef863163"
 }

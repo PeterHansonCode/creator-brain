@@ -40,4 +40,4 @@ No obligatory RAGAS dependency, paid LLM judge, CrewAI/AutoGen, MCP wrapper, AWS
 
 ## Content
 
-Never publish Peter's private vault or redistribute complete third-party transcripts by default. Commit original/approved sample material and a source register. Never present synthetic example material as a creator quotation. Actual creator sources are still needed.
+Never publish Peter's private vault. Commit a source register (title, URL, attribution note per source) alongside the ingested material. Never present synthetic example material as a creator quotation. Actual creator sources have since been ingested (see README) -- real public YouTube captions and nav.al transcripts are committed to this repo; whether that's the right redistribution scope for a public release is a separate decision from whether the code works, and hasn't been made yet.
