@@ -2,6 +2,7 @@ import pytest
 
 from brain.core import Answer, chunks, load_sources, validate_answer, answer_question, synthesize_council
 from brain.evaluate import evaluate, gate, questions_fingerprint
+from brain.core import ROOT
 
 
 def test_chunk_ids_are_stable_and_content_sensitive():
@@ -225,3 +226,45 @@ def test_council_synthesis_never_claims_semantic_agreement_even_on_high_overlap(
     note=synthesize_council(negated_pair)['note'].lower()
     assert 'semantic' in note and 'agreement' in note, 'note must caveat that grouping is not a semantic judgement'
 
+
+def test_advisor_select_markup_has_one_option_per_advisor_plus_council():
+    # Caught by hand during a live demo: the advisor <select> in
+    # web/index.html was authored as
+    #   <option value="council">All three advisors</option value="hormozi">...
+    # -- a closing </option> tag can't carry a value attribute, so browsers
+    # silently drop everything after the first bogus close, leaving only
+    # "All three advisors" as a real option and no way to pick a single
+    # advisor at all. No test caught this because nothing in the suite ever
+    # parsed the HTML; this does, with the stdlib html.parser (already used
+    # for the nav.al ingestion fix), so a future markup slip fails a test
+    # instead of only showing up as a demo-time surprise.
+    from html.parser import HTMLParser
+
+    class SelectOptions(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.in_select = False
+            self.options = []
+            self._current_value = None
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == 'select' and attrs.get('id') == 'advisor':
+                self.in_select = True
+            elif tag == 'option' and self.in_select:
+                self._current_value = attrs.get('value')
+
+        def handle_endtag(self, tag):
+            if tag == 'option' and self.in_select and self._current_value is not None:
+                self.options.append(self._current_value)
+                self._current_value = None
+            elif tag == 'select':
+                self.in_select = False
+
+    html = (ROOT / 'web/index.html').read_text(encoding='utf-8')
+    parser = SelectOptions()
+    parser.feed(html)
+    assert parser.options == ['council', 'hormozi', 'naval', 'kallaway'], (
+        f'expected one option per advisor plus council, got {parser.options!r} -- '
+        'a malformed </option> tag can silently collapse this list in a real browser'
+    )
