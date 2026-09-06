@@ -56,6 +56,74 @@ def test_api_rejects_invalid_advisor_and_foreign_origin():
     assert client.get('/api/sources',headers={'Origin':'https://example.com'}).status_code==403
 
 
+def test_oversized_post_is_rejected_whether_or_not_content_length_is_declared():
+    # Two paths reach the same 16000-byte limit: a request that declares an
+    # oversized Content-Length is rejected by that cheap header check alone
+    # (never even opens the stream); a request that omits Content-Length --
+    # or understates it -- has to be caught by actually reading the stream
+    # and cutting it off partway through, which is what a second review
+    # found this project wasn't doing (the old code fell back to
+    # `await request.body()`, which reads the whole thing into memory
+    # first regardless of the check that follows it).
+    from fastapi.testclient import TestClient
+    from brain.api import app
+    client = TestClient(app)
+
+    oversized_json = b'{"question":"' + b'x' * 20000 + b'","advisor":"naval"}'
+
+    with_length = client.post('/api/query', content=oversized_json,
+                               headers={'Content-Type': 'application/json'})
+    assert with_length.status_code == 413
+
+    def chunked_body():
+        # A generator body has no known length up front, so httpx sends it
+        # chunked with no Content-Length header at all -- the case the
+        # header-only check can't catch.
+        remaining = oversized_json
+        while remaining:
+            yield remaining[:1000]
+            remaining = remaining[1000:]
+
+    without_length = client.post('/api/query', content=chunked_body(),
+                                  headers={'Content-Type': 'application/json'})
+    assert without_length.status_code == 413
+
+
+def test_normal_sized_post_without_declared_content_length_still_works():
+    # The streaming size check must not break the ordinary request path: a
+    # small body sent chunked (no Content-Length) still has to reach the
+    # route handler with its real content intact, since the middleware now
+    # primes request._body itself instead of leaving request.json() to read
+    # a fresh (and, for a chunked request, already-consumed) stream. Retriever
+    # is mocked so this only exercises the body-priming path, not a live
+    # embedding backend.
+    from unittest.mock import patch
+    from fastapi.testclient import TestClient
+    import brain.api as api_module
+    from brain.api import app
+
+    class StubRetriever:
+        def search(self, question, advisor):
+            return [{'chunk_id': f'{advisor}-1', 'source_id': f'{advisor}-1', 'advisor_id': advisor,
+                     'title': 'Title', 'url': 'https://example.com', 'text': 'Evidence text.',
+                     'attribution': 'Attribution.'}]
+
+    payload = b'{"question":"A short valid question?","advisor":"naval","retrieval_only":true}'
+
+    def chunked_body():
+        yield payload[:20]
+        yield payload[20:]
+
+    with patch.object(api_module, 'retriever', return_value=StubRetriever()):
+        client = TestClient(app)
+        response = client.post('/api/query', content=chunked_body(),
+                                headers={'Content-Type': 'application/json'})
+    assert response.status_code == 200
+    body = response.json()
+    assert body['results'][0]['advisor'] == 'naval'
+    assert body['results'][0]['evidence'], 'the chunked body must have been parsed correctly, not dropped'
+
+
 def test_one_advisor_failure_does_not_discard_the_others_and_is_reported():
     # README previously claimed test coverage for per-advisor failure
     # isolation that didn't actually exist. This exercises the real

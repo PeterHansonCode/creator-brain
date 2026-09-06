@@ -21,11 +21,7 @@ async def local_only(request: Request, call_next):
         return JSONResponse({'detail':'Cross-origin requests refused.'}, status_code=403)
     if request.method == 'POST':
         # Reject an oversized request before buffering it, using the
-        # declared Content-Length -- await request.body() used to run
-        # first, meaning a large request was already fully read into
-        # memory before its size was checked. A client that lies about (or
-        # omits) Content-Length still gets caught below, but a well-behaved
-        # oversized request no longer costs the memory in the first place.
+        # declared Content-Length as a first, cheap check.
         declared_length = request.headers.get('content-length')
         if declared_length is not None:
             try:
@@ -33,9 +29,30 @@ async def local_only(request: Request, call_next):
                     return JSONResponse({'detail':'Request too large.'}, status_code=413)
             except ValueError:
                 return JSONResponse({'detail':'Invalid Content-Length.'}, status_code=400)
-        body = await request.body()
-        if len(body) > 16000:
+        # A request with no Content-Length header (or one that understates
+        # the real size) isn't caught by the check above -- and
+        # `await request.body()` reads the *entire* stream into memory
+        # before any size check can run on it, so relying on that alone
+        # still buffers an unbounded request before rejecting it. Read the
+        # stream directly instead and stop as soon as the limit is
+        # exceeded, without ever holding more than ~16KB more than the
+        # limit in memory at once. What was read is then stashed on
+        # `request._body`, which is exactly the attribute Starlette's own
+        # `Request.body()`/`Request.stream()` check first -- so the route
+        # handler's later `await request.json()` sees those same bytes
+        # rather than an already-exhausted stream or a second read.
+        chunks = []
+        total = 0
+        oversized = False
+        async for chunk in request.stream():
+            total += len(chunk)
+            if total > 16000:
+                oversized = True
+                break
+            chunks.append(chunk)
+        if oversized:
             return JSONResponse({'detail':'Request too large.'}, status_code=413)
+        request._body = b''.join(chunks)
     response = await call_next(request)
     response.headers['X-Content-Type-Options']='nosniff'
     response.headers['Cache-Control']='no-store'
