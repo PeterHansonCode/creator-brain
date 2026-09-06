@@ -45,7 +45,7 @@ Seven contract tests cover chunk stability, foreign citations, abstention, regre
 
 ## Sources and limits
 
-The sample JSON contains six short original research paraphrases with primary-source links, not creator transcripts or quotations. Expand it with approved texts for useful depth. Add labelled questions before tuning. Do not commit private vault notes. Ingestion currently accepts JSON text records, not automatic YouTube scraping.
+The corpus (data/sample/sources.json) is real content: 70 sources / 3,159 chunks pulled from public YouTube captions for Hormozi and Kallaway (scripts/ingest_youtube.py) and from Naval's own site transcripts (scripts/ingest_nav_al.py -- his podcast episodes are co-hosted, so auto-captions have no speaker labels and can't be cleanly attributed to him alone). Both scripts are checked in and re-runnable. Add labelled questions before tuning. Do not commit private vault notes.
 
 Citation-ID validity does not establish factual entailment. The model has no action tools, source text is marked untrusted and invalid IDs are rejected; these controls do not prove prompt-injection immunity. Similarity-based abstention is a heuristic. The UI reports failures instead of inventing fallback answers.
 
